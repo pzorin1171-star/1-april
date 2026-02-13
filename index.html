@@ -1,69 +1,247 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Управление ПК друга</title>
+    <title>Первоапрельское управление</title>
+    <meta charset="utf-8">
     <style>
-        body { font-family: Arial; text-align: center; margin-top: 50px; }
-        button { padding: 10px 20px; margin: 5px; font-size: 16px; }
-        input { padding: 10px; font-size: 16px; }
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        button { padding: 15px 30px; margin: 10px; font-size: 18px; cursor: pointer; border: none; border-radius: 5px; }
+        #clientBtn { background: #4CAF50; color: white; }
+        #adminBtn { background: #f44336; color: white; }
+        input { padding: 10px; font-size: 16px; margin: 5px; width: 200px; }
+        .hidden { display: none; }
+        #status { margin-top: 20px; font-weight: bold; }
+        #log { margin-top: 20px; text-align: left; background: #eee; padding: 10px; border-radius: 5px; height: 200px; overflow-y: auto; }
+        .command-btn { background: #008CBA; color: white; padding: 10px 15px; margin: 5px; font-size: 14px; }
     </style>
 </head>
 <body>
-    <h1>🎭 Первоапрельское управление</h1>
-    <div>
-        <label>Код комнаты: </label>
-        <input type="text" id="roomCode" placeholder="1234" maxlength="4">
-        <button id="connectBtn">Подключиться</button>
-    </div>
-    <div id="controls" style="display:none;">
-        <h3>Команды:</h3>
-        <button onclick="sendCommand('calc')">Калькулятор</button>
-        <button onclick="sendCommand('notepad')">Блокнот</button>
-        <button onclick="sendCommand('move_mouse')">Двигать мышь</button>
-        <button onclick="sendCommand('type_hello')">Напечатать "С 1 апреля!"</button>
-        <button onclick="sendCommand('screenshot')">Сделать скриншот</button>
-        <button onclick="sendCommand('volume_up')">Громче</button>
-        <button onclick="sendCommand('volume_down')">Тише</button>
-        <button onclick="sendCommand('open_browser')">Открыть YouTube</button>
+    <div class="container">
+        <h1>🎭 Первоапрельское управление</h1>
+        <p><em>Только с согласия друга!</em></p>
+
+        <div id="roleSelection">
+            <button id="clientBtn">Я клиент (жертва)</button>
+            <button id="adminBtn">Я администратор</button>
+        </div>
+
+        <!-- Панель клиента -->
+        <div id="clientPanel" class="hidden">
+            <h2>Клиент</h2>
+            <p>Введите код комнаты (4 цифры):</p>
+            <input type="text" id="clientRoom" maxlength="4" placeholder="1234">
+            <button id="connectClient">Подключиться</button>
+            <div id="clientStatus"></div>
+            <div id="clientLog" class="hidden">
+                <h3>Лог команд:</h3>
+                <div id="clientCommands"></div>
+            </div>
+        </div>
+
+        <!-- Панель администратора -->
+        <div id="adminPanel" class="hidden">
+            <h2>Администратор</h2>
+            <p>Код комнаты:</p>
+            <input type="text" id="adminRoom" maxlength="4" placeholder="1234">
+            <p>Пароль:</p>
+            <input type="password" id="adminPassword" placeholder="******">
+            <button id="connectAdmin">Подключиться</button>
+            <div id="adminStatus"></div>
+            <div id="adminCommands" class="hidden">
+                <h3>Команды для клиента:</h3>
+                <button class="command-btn" onclick="sendCommand('rickroll')">🎵 Rick Roll</button>
+                <button class="command-btn" onclick="sendCommand('notify')">🔔 Уведомление</button>
+                <button class="command-btn" onclick="sendCommand('beep')">🔊 Звук</button>
+                <button class="command-btn" onclick="sendCommand('changebg')">🎨 Сменить фон</button>
+                <button class="command-btn" onclick="sendCommand('alert')">⚠️ Всплывающее окно</button>
+                <button class="command-btn" onclick="sendCommand('vibrate')">📳 Вибрация (моб.)</button>
+                <button class="command-btn" onclick="sendCommand('getLocation')">📍 Запросить геолокацию</button>
+                <button class="command-btn" onclick="sendCommand('openWindow')">🪟 Всплывающее окно</button>
+            </div>
+        </div>
+
+        <div id="status"></div>
+        <div id="log"></div>
     </div>
 
     <script>
         let ws = null;
-        let room = '';
+        let currentRoom = '';
+        let isAdmin = false;
 
-        document.getElementById('connectBtn').addEventListener('click', () => {
-            room = document.getElementById('roomCode').value.trim();
-            if (!room) return alert('Введите код комнаты');
-            
-            // Подключаемся к WebSocket серверу
-            ws = new WebSocket('wss://your-app-name.onrender.com'); // заменить на реальный URL
-            
-            ws.onopen = () => {
-                console.log('Подключено к серверу');
-                document.getElementById('controls').style.display = 'block';
-            };
-            
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.error) alert(data.error);
-            };
-            
-            ws.onclose = () => {
-                alert('Соединение закрыто');
-                document.getElementById('controls').style.display = 'none';
-            };
+        const clientBtn = document.getElementById('clientBtn');
+        const adminBtn = document.getElementById('adminBtn');
+        const clientPanel = document.getElementById('clientPanel');
+        const adminPanel = document.getElementById('adminPanel');
+        const statusDiv = document.getElementById('status');
+        const logDiv = document.getElementById('log');
+
+        clientBtn.addEventListener('click', () => {
+            document.getElementById('roleSelection').classList.add('hidden');
+            clientPanel.classList.remove('hidden');
         });
 
-        function sendCommand(command) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'command',
-                    room: room,
-                    command: command
-                }));
-            } else {
-                alert('Нет подключения к серверу');
+        adminBtn.addEventListener('click', () => {
+            document.getElementById('roleSelection').classList.add('hidden');
+            adminPanel.classList.remove('hidden');
+        });
+
+        // Подключение клиента
+        document.getElementById('connectClient').addEventListener('click', () => {
+            const room = document.getElementById('clientRoom').value.trim();
+            if (!room || room.length !== 4 || !/^\d+$/.test(room)) {
+                alert('Введите 4 цифры');
+                return;
             }
+            connect('client', room);
+        });
+
+        // Подключение администратора
+        document.getElementById('connectAdmin').addEventListener('click', () => {
+            const room = document.getElementById('adminRoom').value.trim();
+            const password = document.getElementById('adminPassword').value.trim();
+            if (!room || room.length !== 4 || !/^\d+$/.test(room)) {
+                alert('Введите 4 цифры кода комнаты');
+                return;
+            }
+            if (password !== '7355608') {
+                alert('Неверный пароль');
+                return;
+            }
+            connect('admin', room, password);
+        });
+
+        function connect(role, room, password = '') {
+            const SERVER_URL = 'wss://your-app-name.onrender.com'; // ЗАМЕНИТЕ НА ВАШ URL
+
+            ws = new WebSocket(SERVER_URL);
+
+            ws.onopen = () => {
+                log('Соединение установлено');
+                if (role === 'client') {
+                    ws.send(JSON.stringify({ type: 'client', room: room }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'admin', room: room, password: password }));
+                }
+                currentRoom = room;
+                isAdmin = (role === 'admin');
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.error) {
+                    alert(data.error);
+                    log('Ошибка: ' + data.error);
+                    return;
+                }
+                if (data.status === 'connected') {
+                    statusDiv.innerText = `Подключён как ${data.role} в комнате ${room}`;
+                    if (data.role === 'admin') {
+                        document.getElementById('adminCommands').classList.remove('hidden');
+                    } else {
+                        document.getElementById('clientLog').classList.remove('hidden');
+                    }
+                }
+                if (data.command) {
+                    // Клиент получил команду
+                    executeCommand(data.command);
+                }
+            };
+
+            ws.onclose = () => {
+                statusDiv.innerText = 'Отключён';
+                log('Соединение закрыто');
+            };
+
+            ws.onerror = (err) => {
+                log('Ошибка WebSocket');
+                console.error(err);
+            };
+        }
+
+        function sendCommand(cmd) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'command', command: cmd }));
+                log('Отправлена команда: ' + cmd);
+            } else {
+                alert('Нет подключения');
+            }
+        }
+
+        function executeCommand(cmd) {
+            log('Выполняется команда: ' + cmd);
+            // Добавляем в лог клиента
+            const clientCommandsDiv = document.getElementById('clientCommands');
+            if (clientCommandsDiv) {
+                clientCommandsDiv.innerHTML += `<p>➡️ ${cmd}</p>`;
+            }
+
+            // Реализация команд
+            switch (cmd) {
+                case 'rickroll':
+                    window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank');
+                    break;
+                case 'notify':
+                    if (Notification.permission === 'granted') {
+                        new Notification('С 1 апреля!', { body: 'Вас разыграли 😄' });
+                    } else if (Notification.permission !== 'denied') {
+                        Notification.requestPermission().then(perm => {
+                            if (perm === 'granted') {
+                                new Notification('С 1 апреля!', { body: 'Вас разыграли 😄' });
+                            }
+                        });
+                    }
+                    break;
+                case 'beep':
+                    try {
+                        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        const oscillator = audioCtx.createOscillator();
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                        oscillator.connect(audioCtx.destination);
+                        oscillator.start();
+                        oscillator.stop(audioCtx.currentTime + 0.3);
+                    } catch (e) {
+                        console.log('Звук не поддерживается');
+                    }
+                    break;
+                case 'changebg':
+                    document.body.style.backgroundColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+                    break;
+                case 'alert':
+                    alert('С 1 апреля! 😉');
+                    break;
+                case 'vibrate':
+                    if (navigator.vibrate) {
+                        navigator.vibrate([500, 200, 500]);
+                    }
+                    break;
+                case 'getLocation':
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(pos => {
+                            const coords = `Широта: ${pos.coords.latitude}, Долгота: ${pos.coords.longitude}`;
+                            alert('Ваши координаты: ' + coords);
+                            // Можно отправить обратно администратору, но для простоты просто покажем
+                            log('Координаты получены: ' + coords);
+                        }, err => {
+                            alert('Не удалось получить геолокацию');
+                        });
+                    } else {
+                        alert('Геолокация не поддерживается');
+                    }
+                    break;
+                case 'openWindow':
+                    window.open('', '_blank', 'width=300,height=200').document.write('<h1>С 1 апреля!</h1>');
+                    break;
+                default:
+                    log('Неизвестная команда: ' + cmd);
+            }
+        }
+
+        function log(msg) {
+            logDiv.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${msg}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
         }
     </script>
 </body>
