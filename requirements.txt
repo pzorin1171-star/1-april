@@ -1,5 +1,0 @@
-websocket-client
-pyautogui
-pynput
-pycaw  # для Windows
-comtypes
