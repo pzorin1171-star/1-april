@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Управление ПК друга</title>
+    <style>
+        body { font-family: Arial; text-align: center; margin-top: 50px; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; }
+        input { padding: 10px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>🎭 Первоапрельское управление</h1>
+    <div>
+        <label>Код комнаты: </label>
+        <input type="text" id="roomCode" placeholder="1234" maxlength="4">
+        <button id="connectBtn">Подключиться</button>
+    </div>
+    <div id="controls" style="display:none;">
+        <h3>Команды:</h3>
+        <button onclick="sendCommand('calc')">Калькулятор</button>
+        <button onclick="sendCommand('notepad')">Блокнот</button>
+        <button onclick="sendCommand('move_mouse')">Двигать мышь</button>
+        <button onclick="sendCommand('type_hello')">Напечатать "С 1 апреля!"</button>
+        <button onclick="sendCommand('screenshot')">Сделать скриншот</button>
+        <button onclick="sendCommand('volume_up')">Громче</button>
+        <button onclick="sendCommand('volume_down')">Тише</button>
+        <button onclick="sendCommand('open_browser')">Открыть YouTube</button>
+    </div>
+
+    <script>
+        let ws = null;
+        let room = '';
+
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            room = document.getElementById('roomCode').value.trim();
+            if (!room) return alert('Введите код комнаты');
+            
+            // Подключаемся к WebSocket серверу
+            ws = new WebSocket('wss://your-app-name.onrender.com'); // заменить на реальный URL
+            
+            ws.onopen = () => {
+                console.log('Подключено к серверу');
+                document.getElementById('controls').style.display = 'block';
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.error) alert(data.error);
+            };
+            
+            ws.onclose = () => {
+                alert('Соединение закрыто');
+                document.getElementById('controls').style.display = 'none';
+            };
+        });
+
+        function sendCommand(command) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'command',
+                    room: room,
+                    command: command
+                }));
+            } else {
+                alert('Нет подключения к серверу');
+            }
+        }
+    </script>
+</body>
+</html>
