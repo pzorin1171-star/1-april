@@ -1,24 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Первоапрельское управление</title>
+    <title>Первоапрельское управление (HTTP)</title>
     <meta charset="utf-8">
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        body { font-family: Arial; text-align: center; margin-top: 50px; background: #f0f0f0; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 10px; }
         button { padding: 15px 30px; margin: 10px; font-size: 18px; cursor: pointer; border: none; border-radius: 5px; }
         #clientBtn { background: #4CAF50; color: white; }
         #adminBtn { background: #f44336; color: white; }
         input { padding: 10px; font-size: 16px; margin: 5px; width: 200px; }
         .hidden { display: none; }
-        #status { margin-top: 20px; font-weight: bold; }
         #log { margin-top: 20px; text-align: left; background: #eee; padding: 10px; border-radius: 5px; height: 200px; overflow-y: auto; }
         .command-btn { background: #008CBA; color: white; padding: 10px 15px; margin: 5px; font-size: 14px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🎭 Первоапрельское управление</h1>
+        <h1>🎭 Первоапрельское управление (HTTP)</h1>
         <p><em>Только с согласия друга!</em></p>
 
         <div id="roleSelection">
@@ -34,7 +33,7 @@
             <button id="connectClient">Подключиться</button>
             <div id="clientStatus"></div>
             <div id="clientLog" class="hidden">
-                <h3>Лог команд:</h3>
+                <h3>Полученные команды:</h3>
                 <div id="clientCommands"></div>
             </div>
         </div>
@@ -61,20 +60,22 @@
             </div>
         </div>
 
-        <div id="status"></div>
         <div id="log"></div>
     </div>
 
     <script>
-        let ws = null;
+        // Замените на ваш адрес сервера (без / в конце)
+        const SERVER_URL = 'https://ваш-сервер.onrender.com';  // например, https://april-http.onrender.com
+
         let currentRoom = '';
         let isAdmin = false;
+        let pollInterval = null;
 
+        // Элементы интерфейса
         const clientBtn = document.getElementById('clientBtn');
         const adminBtn = document.getElementById('adminBtn');
         const clientPanel = document.getElementById('clientPanel');
         const adminPanel = document.getElementById('adminPanel');
-        const statusDiv = document.getElementById('status');
         const logDiv = document.getElementById('log');
 
         clientBtn.addEventListener('click', () => {
@@ -88,96 +89,101 @@
         });
 
         // Подключение клиента
-        document.getElementById('connectClient').addEventListener('click', () => {
+        document.getElementById('connectClient').addEventListener('click', async () => {
             const room = document.getElementById('clientRoom').value.trim();
             if (!room || room.length !== 4 || !/^\d+$/.test(room)) {
                 alert('Введите 4 цифры');
                 return;
             }
-            connect('client', room);
+            currentRoom = room;
+            isAdmin = false;
+
+            // Регистрируем комнату на сервере
+            try {
+                const res = await fetch(`${SERVER_URL}/api/client/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ room })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                log('Клиент зарегистрирован в комнате ' + room);
+                document.getElementById('clientStatus').innerText = 'Подключено. Жду команд...';
+                document.getElementById('clientLog').classList.remove('hidden');
+                // Запускаем опрос команд
+                startPolling(room);
+            } catch (err) {
+                alert('Ошибка: ' + err.message);
+            }
         });
 
         // Подключение администратора
-        document.getElementById('connectAdmin').addEventListener('click', () => {
+        document.getElementById('connectAdmin').addEventListener('click', async () => {
             const room = document.getElementById('adminRoom').value.trim();
             const password = document.getElementById('adminPassword').value.trim();
             if (!room || room.length !== 4 || !/^\d+$/.test(room)) {
-                alert('Введите 4 цифры кода комнаты');
+                alert('Введите 4 цифры');
                 return;
             }
             if (password !== '7355608') {
                 alert('Неверный пароль');
                 return;
             }
-            connect('admin', room, password);
+            currentRoom = room;
+            isAdmin = true;
+            document.getElementById('adminStatus').innerText = 'Подключено как администратор';
+            document.getElementById('adminCommands').classList.remove('hidden');
+            log('Администратор подключён к комнате ' + room);
         });
 
-        function connect(role, room, password = '') {
-            const SERVER_URL = 'wss://one-april.onrender.com'; // ЗАМЕНИТЕ НА ВАШ URL
-
-            ws = new WebSocket(SERVER_URL);
-
-            ws.onopen = () => {
-                log('Соединение установлено');
-                if (role === 'client') {
-                    ws.send(JSON.stringify({ type: 'client', room: room }));
-                } else {
-                    ws.send(JSON.stringify({ type: 'admin', room: room, password: password }));
-                }
-                currentRoom = room;
-                isAdmin = (role === 'admin');
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.error) {
-                    alert(data.error);
-                    log('Ошибка: ' + data.error);
-                    return;
-                }
-                if (data.status === 'connected') {
-                    statusDiv.innerText = `Подключён как ${data.role} в комнате ${room}`;
-                    if (data.role === 'admin') {
-                        document.getElementById('adminCommands').classList.remove('hidden');
-                    } else {
-                        document.getElementById('clientLog').classList.remove('hidden');
-                    }
-                }
-                if (data.command) {
-                    // Клиент получил команду
-                    executeCommand(data.command);
-                }
-            };
-
-            ws.onclose = () => {
-                statusDiv.innerText = 'Отключён';
-                log('Соединение закрыто');
-            };
-
-            ws.onerror = (err) => {
-                log('Ошибка WebSocket');
-                console.error(err);
-            };
-        }
-
-        function sendCommand(cmd) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'command', command: cmd }));
-                log('Отправлена команда: ' + cmd);
-            } else {
-                alert('Нет подключения');
+        // Функция отправки команды (админ)
+        window.sendCommand = async function(cmd) {
+            if (!isAdmin) {
+                alert('Только администратор может отправлять команды');
+                return;
             }
+            try {
+                const res = await fetch(`${SERVER_URL}/api/admin/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        room: currentRoom,
+                        password: '7355608',
+                        command: cmd
+                    })
+                });
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                log('Команда отправлена: ' + cmd);
+            } catch (err) {
+                alert('Ошибка: ' + err.message);
+            }
+        };
+
+        // Опрос команд для клиента
+        function startPolling(room) {
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${SERVER_URL}/api/client/poll?room=${room}`);
+                    const data = await res.json();
+                    if (data.command) {
+                        executeCommand(data.command);
+                    }
+                } catch (err) {
+                    console.error('Ошибка опроса:', err);
+                }
+            }, 2000); // каждые 2 секунды
         }
 
+        // Выполнение команды на стороне клиента
         function executeCommand(cmd) {
             log('Выполняется команда: ' + cmd);
-            // Добавляем в лог клиента
             const clientCommandsDiv = document.getElementById('clientCommands');
             if (clientCommandsDiv) {
                 clientCommandsDiv.innerHTML += `<p>➡️ ${cmd}</p>`;
             }
 
-            // Реализация команд
             switch (cmd) {
                 case 'rickroll':
                     window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank');
@@ -222,7 +228,6 @@
                         navigator.geolocation.getCurrentPosition(pos => {
                             const coords = `Широта: ${pos.coords.latitude}, Долгота: ${pos.coords.longitude}`;
                             alert('Ваши координаты: ' + coords);
-                            // Можно отправить обратно администратору, но для простоты просто покажем
                             log('Координаты получены: ' + coords);
                         }, err => {
                             alert('Не удалось получить геолокацию');
